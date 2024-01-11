@@ -1,5 +1,6 @@
-data/
+model.pt
 
+*.csv
 *.npy
 *.avi
 *.h5

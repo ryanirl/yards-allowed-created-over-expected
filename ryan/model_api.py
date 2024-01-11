@@ -6,9 +6,9 @@ from typing import Tuple
 from typing import List
 from torch import Tensor
 
-from utils import convert_output
-from utils import prepare_data
-from utils import combine
+from utils.data import convert_output
+from utils.data import prepare_data
+from utils.data import combine
 
 from model import TrajectoryModel
 
@@ -67,37 +67,39 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
     model = TrajectoryModel()
+    model.load_state_dict(torch.load("models/model_split_0.pt"))
     model_api = TrajectoryAPI(model)
 
-    x = np.load("data_large.npy", allow_pickle = True)
-    x = x[1][:20]
-    x = prepare_data(x)
+    game_id = 2022091808
+    play_id = 565
 
-    out = model_api.predict(x, 10)
+    data = np.load("output.npy", allow_pickle = True).item()
+    data = data[game_id][play_id]
+    l, n, _ = data.shape
+
+    data = data[:l//2]
+    inp = prepare_data(data)
+
+    out = model_api.predict(inp, l//2)
     x, y, d, v = convert_output(out)
+
     print("x", x.shape)
     print("y", y.shape)
     print("d", d.shape)
     print("v", v.shape)
-    print(out.shape)
-
-    print(d)
-
-    plt.plot(d[:, 0])
-    plt.show()
 
     for i in range(22):
         plt.scatter(
             x = x[:, i],
             y = y[:, i],
+            c = "red",
             s = 5
         )
 
     for i in range(22):
         plt.scatter(
-            x = out[:, i, 0],
-            y = out[:, i, 1],
-            c = "red",
+            x = data[:, i, 0],
+            y = data[:, i, 1],
             s = 5
         )
 

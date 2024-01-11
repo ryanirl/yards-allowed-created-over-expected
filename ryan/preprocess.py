@@ -307,18 +307,20 @@ def preprocess(data_dir: str, output_file: str = "data.npz", safe: bool = True) 
 
 if __name__ == "__main__":
     import argparse
-    from utils import setup_logger
+    from utils.logger import setup_logger
 
     name = "preprocessing"
     desc = "Script for preprocessing the raw NFL Big Data Bowl 2024 Kaggle data."
 
-    parser = argparse.ArgumentParser(prog = name, description = desc)
+    parser = argparse.ArgumentParser(
+        prog = name, description = desc, formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument(
         "-i", "--data_dir", type = str, default = "../data/", metavar = "",
         help = "Location to the folder containing all of the Kaggle data."
     )
     parser.add_argument(
-        "-o", "--output_file", type = str, default = "output.npz", metavar = "",
+        "-o", "--output_file", type = str, default = "output.npy", metavar = "",
         help = "Output file for the data, must have the .npy ending."
     )
     args = parser.parse_args()

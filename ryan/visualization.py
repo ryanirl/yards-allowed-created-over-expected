@@ -1,15 +1,21 @@
+from tqdm.auto import tqdm
+from PIL import Image
 import polars as pl
 import numpy as np
+import imageio
+import os
+import io
 
 from typing import Optional
 from typing import Union
+from typing import List
 
 import plotly.graph_objects as go
 
-from football_field import get_line_of_scrimmage
-from football_field import get_field_number_bottom
-from football_field import get_field_number_top
-from football_field import get_layout
+from utils.football_field import get_line_of_scrimmage
+from utils.football_field import get_field_number_bottom
+from utils.football_field import get_field_number_top
+from utils.football_field import get_layout
 
 
 def get_title(df_play: pl.DataFrame, game_id: int, play_id: int) -> str:
@@ -27,13 +33,43 @@ def get_title(df_play: pl.DataFrame, game_id: int, play_id: int) -> str:
     return title
 
 
+def write_animation(fig: go.Figure, animation: List[go.Frame], layout: go.Layout, save_as: str, fps: int) -> None:
+    extension = os.path.splitext(save_as)[1].lower()
+    
+    if extension == ".html":
+        fig.write_html(save_as)
+
+    elif extension == ".json":
+        fig.write_json(save_as)
+
+    elif extension in [".mp4", ".gif"]:
+        image_arr = []
+        for frame in tqdm(animation, desc = "Writing video"):
+            fig_img = go.Figure(frame["data"], layout = layout).to_image(format = "png")
+            fig_buf = io.BytesIO(fig_img)
+            fig_arr = np.array(Image.open(fig_buf))
+            fig_arr = fig_arr[0:550, 10:] # To remove excess white space. 
+            fig_arr[500:] = fig_arr[0, 0]
+            image_arr.append(fig_arr)
+
+        imageio.mimwrite(save_as, image_arr, duration = 1000.0 * (1.0 / fps))
+
+    else:
+        print(
+            f"Extension '{extension}' not found. Options are '.html', '.json', "
+            f"'.mp4', or '.gif'. Skipping saving the animation."
+        )
+
+
 def animate_play(
     df_tracking: pl.DataFrame, 
     df_plays: pl.DataFrame, 
     game_id: int = 2022091808, 
     play_id: int = 565,
     predictions: Optional[np.ndarray] = None, 
-    scale: Union[int, float] = 10
+    scale: Union[int, float] = 10,
+    save_as: Optional[str] = None,
+    fps: int = 10
 ) -> go.Figure:
     """
     """
@@ -94,7 +130,7 @@ def animate_play(
             frame.append(pred_points)
 
         # Plot current point of each team colored.
-        for team in df_tracking["club"].unique():
+        for team in sorted(df_tracking["club"].unique()):
             df_curr = df_tracking.filter(
                 (df_tracking["club"] == team) & 
                 (df_tracking["frameId"] == frame_id)
@@ -130,6 +166,9 @@ def animate_play(
         frames = animation[1:]
     )
 
+    if save_as is not None:
+        write_animation(fig, animation, layout, save_as, fps)
+
     return fig
 
 
@@ -142,21 +181,51 @@ def parse_args():
         "performance of the trajectory forcasting model."
     )
 
-    parser = argparse.ArgumentParser(prog = name, description = desc)
-    parser.add_argument("-i", "--data-dir", default = "./data/", type = str, metavar = "")
-    parser.add_argument("-o", "--save-as", default = None, type = str, metavar = "")
-    parser.add_argument("--game-id", default = 2022091808, type = int, metavar = "")
-    parser.add_argument("--play-id", default = 565, type = int, metavar = "")
-    parser.add_argument("--model-path", default = "./ryan/models/model_rnn_final_split_0.pt", type = str, metavar = "")
-    parser.add_argument("--model-data-path", default = "./ryan/output.npy", type = str, metavar = "")
-    parser.add_argument("--n-pred", default = 10, type = int, metavar = "")
+    parser = argparse.ArgumentParser(
+        prog = name, description = desc, formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    )
+
+    parser.add_argument(
+        "-i", "--data-dir", default = "../data/", type = str, metavar = "",
+        help = "the path to the folder containing the Kaggle data."
+    )
+    parser.add_argument(
+        "-o", "--save-as", default = None, type = str, metavar = "",
+        help = "optional param to save the figure as an html, json, gif, or mp4."
+    )
+    parser.add_argument(
+        "--fps", default = 10, type = int, metavar = "",
+        help = "if saving as a video, this is the fps to save as."
+    )
+    parser.add_argument(
+        "--game-id", default = 2022091808, type = int, metavar = "",
+        help = "the game id to plot"
+    )
+    parser.add_argument(
+        "--play-id", default = 565, type = int, metavar = "",
+        help = "the play id to plot"
+    )
+    parser.add_argument(
+        "--model-path", default = "./models/model_split_0.pt", type = str, metavar = "",
+        help =  "the path to the file containing the model state dict."
+    )
+    parser.add_argument(
+        "--model-data-path", default = "./output.npy", type = str, metavar = "",
+        help = "the path to the preprocessed data."
+    )
+    parser.add_argument(
+        "--n-pred", default = 10, type = int, metavar = "",
+        help = "How many points to predict into the future with the trajectory model."
+    )
 
     return parser.parse_args()
 
 
 def main():
+    import torch
     import os
 
+    from model import TrajectoryModel
     from model_api import TrajectoryAPI
     from model_api import prepare_data
     from model_api import convert_output
@@ -170,13 +239,16 @@ def main():
     play = play[args.game_id][args.play_id]
     play = prepare_data(play)
 
-    model = TrajectoryAPI(args.model_path)
+    model = TrajectoryModel()
+    model.load_state_dict(torch.load(args.model_path))
+
+    model_api = TrajectoryAPI(model)
 
     # Predict on every single frame n_steps into the future.
     l, n, c = play.shape
     predictions = np.zeros((l, args.n_pred, n, 4)) 
     for t in range(1, l):
-        out = model.predict(play[:t], args.n_pred)
+        out = model_api.predict(play[:t], args.n_pred)
         predictions[t] = np.stack(convert_output(out)).transpose(1, 2, 0)
 
     fig = animate_play(
@@ -184,7 +256,9 @@ def main():
         df_plays, 
         args.game_id, 
         args.play_id, 
-        predictions
+        predictions,
+        save_as = args.save_as,
+        fps = args.fps
     )
     fig.show()
 
