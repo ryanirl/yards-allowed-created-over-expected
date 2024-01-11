@@ -57,23 +57,39 @@ work attempts to change this.
  - Assign this difference to each player as a performance rating.
  - Sum up performance ratings for each time window to get a rating for each player for each play.
 
+Below is a broad intuition for how we define our metric. That is, for every player, we compute
+their expected baseline movement from the trajectory model for some time frame into the future
+and evaluate the expected yards until tackle if they took that path. Then we witness their actual
+movement some time frame into the future (same amount of time as predicted) and
+once again compute the expected yards until tackle. Then our metric is the difference between these
+two values.
+
+
+<center>
+<img src="./figures/model_intuition.png" width="50%">
+</center>
+
 
 ## Reproducability
 
 
 ### Trajectory Model
 
-Est Time to Reproduce: 
+<center>
+<img src="./figures/ryan-model.png" width="80%">
+</center>
+
+Estimated time to reproduce: 
  - 45 minutes when training from scratch
  - 15 minutes when using provided models
 
 
-First download the dataset from Kaggle (LINK) and put it under the data folder
-`yards-allowed-created-over-expected/data/` that is, there should be a file
-named `yards-allowed-created-over-expected/data/tracking_week_1.csv` (among the
-other files). Then you can follow the rest of the commands to reproduce:
+First download the dataset from Kaggle [link](https://www.kaggle.com/competitions/nfl-big-data-bowl-2024/data) 
+and put it under the data folder `yards-allowed-created-over-expected/data/`
+that is, there should be a file named `yards-allowed-created-over-expected/data/tracking_week_1.csv` 
+(among the other files). Then you can follow the rest of the commands to reproduce:
 
-First, preprocess the data. This should take about 5 minutes depending on the
+First, preprocess the data. This should take from 5-10 minutes depending on the
 computer.
 
 ```
@@ -98,7 +114,7 @@ python3 visualization.py -h && python3 visualization.py
 This should return a play that looks like the below:
 
 <center>
-<img src="./figures/predicted_movement_and_tackle.gif" width="90%">
+<img src="./figures/trajectory_example.gif" width="90%">
 </center>
 
 
